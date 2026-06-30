@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,14 +13,12 @@ class SignupScreen extends ConsumerStatefulWidget {
 }
 
 class _SignupScreenState extends ConsumerState<SignupScreen> {
-  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
 
   @override
   void dispose() {
-    _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -30,22 +29,29 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       _isLoading = true;
     });
 
-    final authService = ref.read(localAuthServiceProvider);
-    final success = await authService.register(
-      username: _usernameController.text.trim(),
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
+    try {
+      final authService = ref.read(firebaseAuthServiceProvider);
+      await authService.register(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
 
-    if (mounted) {
-      if (success) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sign up successful. Please log in.')),
+          const SnackBar(content: Text('Sign up successful.')),
         );
-        context.go('/');
-      } else {
+        context.go('/home');
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Username already exists.')),
+          SnackBar(content: Text(_authErrorMessage(e))),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not sign up. Please try again.')),
         );
       }
     }
@@ -54,6 +60,19 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  String _authErrorMessage(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'email-already-in-use':
+        return 'Email already exists.';
+      case 'invalid-email':
+        return 'Please enter a valid email address.';
+      case 'weak-password':
+        return 'Password should be at least 6 characters.';
+      default:
+        return error.message ?? 'Could not sign up. Please try again.';
     }
   }
 
@@ -68,11 +87,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TextField(
-              controller: _usernameController,
-              decoration: const InputDecoration(labelText: 'Username'),
-            ),
-            const SizedBox(height: 12),
             TextField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
@@ -100,7 +114,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             ),
             const SizedBox(height: 12),
             TextButton(
-              onPressed: () => context.go('/'),
+              onPressed: () => context.go('/login'),
               child: const Text('Already have an account? Log in'),
             ),
           ],

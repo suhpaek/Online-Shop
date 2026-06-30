@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../providers/login_provider.dart';
 import '../providers/products_provider.dart';
 
 class CatalogScreen extends ConsumerWidget {
@@ -10,23 +9,10 @@ class CatalogScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final productsAsyncValue = ref.watch(productsFutureProvider);
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Product Catalog'),
-        leading: !ref.watch(authProvider)
-            ? IconButton(
-                icon: const Icon(Icons.login),
-                onPressed: () {
-                  context.go('/');
-                },
-              )
-            : IconButton(
-                icon: const Icon(Icons.logout),
-                onPressed: () {
-                  ref.read(authProvider.notifier).state = false;
-                  context.go('/');
-                },
-              ),
       ),
       body: productsAsyncValue.when(
         data: (products) {

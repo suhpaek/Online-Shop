@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../providers/cart_provider.dart';
 import '../providers/products_provider.dart';
 
 
@@ -19,7 +20,7 @@ class DetailsScreen extends ConsumerWidget {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            context.go('/catalog');
+            context.go('/home');
           },
         ),
       ),
@@ -37,6 +38,23 @@ class DetailsScreen extends ConsumerWidget {
                 Text('\$${product.price.toStringAsFixed(2)}', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 16),
                 Text(product.description),
+                const Spacer(),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      ref.read(cartProvider.notifier).addToCart(product);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Added to cart!'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                    child: const Text('Add to Cart'),
+                  ),
+                ),
               ],
             ),
           );

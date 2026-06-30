@@ -27,7 +27,7 @@ class LocalAuthService {
     required String password,
   }) async {
     final users = await _loadUsers();
-    if (users.any((user) => user['username'] == username)) {
+    if (users.any((user) => user['email'] == email || user['username'] == username)) {
       return false;
     }
 
@@ -48,7 +48,8 @@ class LocalAuthService {
     final users = await _loadUsers();
     final user = users.firstWhere(
       (user) =>
-          user['username'] == username && user['password'] == password,
+          (user['email'] == username || user['username'] == username) &&
+          user['password'] == password,
       orElse: () => {},
     );
 
@@ -56,6 +57,30 @@ class LocalAuthService {
 
     final prefs = await _prefs;
     prefs.setString(_currentUserKey, jsonEncode(user));
+    return true;
+  }
+
+  Future<bool> updateCurrentUserEmail(String newEmail) async {
+    final prefs = await _prefs;
+    final currentRaw = prefs.getString(_currentUserKey);
+    if (currentRaw == null) return false;
+
+    final currentUser = jsonDecode(currentRaw) as Map<String, dynamic>;
+    final users = await _loadUsers();
+
+    final index = users.indexWhere((user) =>
+        user['email'] == currentUser['email'] ||
+        user['username'] == currentUser['username']);
+    if (index == -1) return false;
+
+    users[index] = {
+      'username': newEmail,
+      'email': newEmail,
+      'password': users[index]['password'],
+    };
+
+    await _saveUsers(users);
+    prefs.setString(_currentUserKey, jsonEncode(users[index]));
     return true;
   }
 
