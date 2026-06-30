@@ -25,8 +25,9 @@ class MyApp extends ConsumerWidget {
       initialLocation: isLoggedIn ? '/home' : '/login',
       redirect: (context, state) {
         final isLoggedIn = ref.read(authProvider);
-        final isLoggingIn = state.matchedLocation == '/login' || 
-                           state.matchedLocation == '/signup';
+        final isLoggingIn =
+            state.matchedLocation == '/login' ||
+            state.matchedLocation == '/signup';
 
         if (!isLoggedIn && !isLoggingIn) {
           return '/login';
@@ -49,12 +50,25 @@ class MyApp extends ConsumerWidget {
         ),
         GoRoute(
           path: '/home',
-          builder: (context, state) => const MainWrapper(),
+          builder: (context, state) {
+            final tab = state.uri.queryParameters['tab'];
+            final initialIndex = tab == 'cart'
+                ? 1
+                : tab == 'profile'
+                ? 2
+                : 0;
+
+            return MainWrapper(initialIndex: initialIndex);
+          },
         ),
         GoRoute(
           path: '/details/:id',
           builder: (context, state) =>
               DetailsScreen(productId: int.parse(state.pathParameters['id']!)),
+        ),
+        GoRoute(
+          path: '/profile',
+          builder: (context, state) => const MainWrapper(initialIndex: 2),
         ),
       ],
     );

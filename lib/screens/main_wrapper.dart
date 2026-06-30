@@ -6,20 +6,36 @@ import 'cart_screen.dart';
 import 'profile_screen.dart';
 
 class MainWrapper extends ConsumerStatefulWidget {
-  const MainWrapper({super.key});
+  const MainWrapper({super.key, this.initialIndex = 0});
+
+  final int initialIndex;
 
   @override
   ConsumerState<MainWrapper> createState() => _MainWrapperState();
 }
 
 class _MainWrapperState extends ConsumerState<MainWrapper> {
-  int _selectedIndex = 0;
+  late int _selectedIndex;
 
   final List<Widget> _screens = [
     const CatalogScreen(),
     const CartScreen(),
     const ProfileScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = widget.initialIndex;
+  }
+
+  @override
+  void didUpdateWidget(covariant MainWrapper oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialIndex != oldWidget.initialIndex) {
+      _selectedIndex = widget.initialIndex;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

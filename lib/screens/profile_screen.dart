@@ -24,9 +24,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late TextEditingController _cityController;
   late TextEditingController _addressController;
   late TextEditingController _postalCodeController;
-  
+
   String? _selectedImagePath;
   final ImagePicker _imagePicker = ImagePicker();
+  bool _isLoadingProfile = false;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -40,11 +42,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _countryController = TextEditingController(text: profile?.country ?? '');
     _cityController = TextEditingController(text: profile?.city ?? '');
     _addressController = TextEditingController(text: profile?.address ?? '');
-    _postalCodeController = TextEditingController(text: profile?.postalCode ?? '');
-    
+    _postalCodeController = TextEditingController(
+      text: profile?.postalCode ?? '',
+    );
+
     if (profile != null && profile.image.startsWith('/')) {
       _selectedImagePath = profile.image;
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSavedProfile();
+    });
   }
 
   @override
@@ -57,6 +65,68 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _addressController.dispose();
     _postalCodeController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSavedProfile() async {
+    final user = ref.read(firebaseAuthServiceProvider).currentUser;
+    if (user == null) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingProfile = true;
+    });
+
+    Profile? localProfile;
+
+    try {
+      localProfile = await ref
+          .read(localProfileServiceProvider)
+          .loadProfile(user.uid);
+
+      if (mounted && localProfile != null) {
+        _applyProfile(localProfile);
+      }
+
+      final remoteProfile = await ref
+          .read(firebaseProfileServiceProvider)
+          .loadProfile(user.uid);
+
+      if (!mounted || remoteProfile == null) {
+        return;
+      }
+
+      await ref
+          .read(localProfileServiceProvider)
+          .saveProfile(userId: user.uid, profile: remoteProfile);
+      _applyProfile(remoteProfile);
+    } on FirebaseException catch (e) {
+      if (!mounted || localProfile != null) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_profileStorageErrorMessage(e))));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingProfile = false;
+        });
+      }
+    }
+  }
+
+  void _applyProfile(Profile profile) {
+    ref.read(profileProvider.notifier).state = profile;
+
+    setState(() {
+      _nameController.text = profile.name;
+      _emailController.text = profile.email;
+      _phoneController.text = profile.phone;
+      _countryController.text = profile.country;
+      _cityController.text = profile.city;
+      _addressController.text = profile.address;
+      _postalCodeController.text = profile.postalCode;
+      _selectedImagePath = profile.image.startsWith('/') ? profile.image : null;
+    });
   }
 
   Future<void> _pickImageFromGallery() async {
@@ -72,24 +142,42 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error picking image: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
     }
   }
 
   Future<void> _saveProfile() async {
     final String newEmail = _emailController.text.trim();
-    final String imagePath = _selectedImagePath ??
-        'https://ui-avatars.com/api/?name=${_nameController.text}&background=random';
+    final String imagePath =
+        _selectedImagePath ??
+        'https://api.dicebear.com/7.x/bottts/svg?seed=${_nameController.text.isNotEmpty ? _nameController.text : 'User'}';
+
+    final user = ref.read(firebaseAuthServiceProvider).currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to save your profile.')),
+      );
+      return;
+    }
 
     final currentEmail = ref.read(emailProvider).trim();
 
-    if (newEmail.isNotEmpty && currentEmail.isNotEmpty && newEmail != currentEmail) {
+    setState(() {
+      _isSaving = true;
+    });
+
+    if (newEmail.isNotEmpty &&
+        currentEmail.isNotEmpty &&
+        newEmail != currentEmail) {
       try {
         await ref.read(firebaseAuthServiceProvider).updateEmail(newEmail);
       } on FirebaseAuthException catch (e) {
         if (!mounted) return;
+        setState(() {
+          _isSaving = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.message ?? 'Failed to update email.')),
         );
@@ -108,9 +196,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       postalCode: _postalCodeController.text,
     );
 
-    ref.read(profileProvider.notifier).state = profile;
+    try {
+      await ref
+          .read(localProfileServiceProvider)
+          .saveProfile(userId: user.uid, profile: profile);
+      ref.read(profileProvider.notifier).state = profile;
+
+      await ref
+          .read(firebaseProfileServiceProvider)
+          .saveProfile(userId: user.uid, profile: profile);
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      final message = _profileStorageErrorMessage(e);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$message Saved on this device.')));
+      setState(() {
+        _isSaving = false;
+      });
+      return;
+    }
 
     if (!mounted) return;
+    setState(() {
+      _isSaving = false;
+    });
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -118,9 +229,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ? 'Profile saved. Check your inbox to confirm the new email.'
               : 'Profile saved successfully!',
         ),
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  String _profileStorageErrorMessage(FirebaseException error) {
+    switch (error.code) {
+      case 'permission-denied':
+        return 'Profile storage is not available. Check Firestore rules.';
+      case 'unavailable':
+        return 'Profile storage is temporarily unavailable. Try again later.';
+      case 'not-found':
+        return 'Profile storage is not configured yet.';
+      default:
+        return 'Could not save profile. Please try again.';
+    }
   }
 
   @override
@@ -128,28 +252,64 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final profile = ref.watch(profileProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-      ),
+      appBar: AppBar(title: const Text('Profile')),
       resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 24),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            MediaQuery.of(context).viewInsets.bottom + 24,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Аватар с возможностью изменения
+              if (_isLoadingProfile) const LinearProgressIndicator(),
+              if (_isLoadingProfile) const SizedBox(height: 16),
               Stack(
                 children: [
-                  CircleAvatar(
-                    radius: 60,
-                    backgroundImage: _selectedImagePath != null
-                        ? FileImage(File(_selectedImagePath!))
-                        : (profile?.image != null && profile!.image.startsWith('/')
-                            ? FileImage(File(profile.image))
-                            : NetworkImage(
-                                profile?.image ?? 'https://ui-avatars.com/api/?name=User&background=random',
-                              ) as ImageProvider),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(60),
+                    child: Container(
+                      width: 120,
+                      height: 120,
+                      color: Colors.grey[200],
+                      child: _selectedImagePath != null
+                          ? Image.file(
+                              File(_selectedImagePath!),
+                              fit: BoxFit.cover,
+                            )
+                          : (profile?.image != null
+                                ? (profile!.image.startsWith('/')
+                                      ? Image.file(
+                                          File(profile.image),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : Image.network(
+                                          profile.image,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) {
+                                                return const Icon(
+                                                  Icons.account_circle,
+                                                  size: 80,
+                                                  color: Colors.grey,
+                                                );
+                                              },
+                                        ))
+                                : Image.network(
+                                    'https://api.dicebear.com/7.x/bottts/svg?seed=User',
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return const Icon(
+                                        Icons.account_circle,
+                                        size: 80,
+                                        color: Colors.grey,
+                                      );
+                                    },
+                                  )),
+                    ),
                   ),
                   Positioned(
                     bottom: 0,
@@ -174,8 +334,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-
-              // Форма редактирования
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -226,9 +384,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       const SizedBox(height: 24),
                       ElevatedButton.icon(
-                        onPressed: _saveProfile,
-                        icon: const Icon(Icons.save),
-                        label: const Text('Save Profile'),
+                        onPressed: _isSaving ? null : _saveProfile,
+                        icon: _isSaving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.save),
+                        label: Text(_isSaving ? 'Saving...' : 'Save Profile'),
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 48),
                         ),
@@ -269,10 +435,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     );
   }

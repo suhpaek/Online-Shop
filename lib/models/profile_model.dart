@@ -7,7 +7,7 @@ class Profile {
   final String city;
   final String address;
   final String postalCode;
-  
+
   Profile({
     required this.image,
     required this.name,
@@ -21,14 +21,27 @@ class Profile {
 
   factory Profile.fromJson(Map<String, dynamic> json) {
     return Profile(
-      image: json['image'] as String,
-      name: json['name'] as String,
-      email: json['email'] as String,
-      phone: json['phone'] as String,
-      country: json['country'] as String,
-      city: json['city'] as String,
-      address: json['address'] as String,
-      postalCode: json['postalCode'] as String,
+      image: json['image'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      email: json['email'] as String? ?? '',
+      phone: json['phone'] as String? ?? '',
+      country: json['country'] as String? ?? '',
+      city: json['city'] as String? ?? '',
+      address: json['address'] as String? ?? '',
+      postalCode: json['postalCode'] as String? ?? '',
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'image': image,
+      'name': name,
+      'email': email,
+      'phone': phone,
+      'country': country,
+      'city': city,
+      'address': address,
+      'postalCode': postalCode,
+    };
   }
 }
