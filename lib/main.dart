@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'providers/login_provider.dart';
+import 'providers/profile_provider.dart';
 import 'screens/details_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_wrapper.dart';
@@ -19,6 +20,8 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(profileAuthSyncProvider);
+
     final isLoggedIn = ref.watch(authProvider);
 
     final GoRouter router = GoRouter(
