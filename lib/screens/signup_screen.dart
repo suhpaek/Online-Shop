@@ -37,12 +37,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
     try {
       final authService = ref.read(firebaseAuthServiceProvider);
-      await authService.register(
+      final credential = await authService.register(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
 
       if (mounted) {
+        debugPrint('Signed up user: ${credential.user?.email ?? 'unknown'}');
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Sign up successful.')));

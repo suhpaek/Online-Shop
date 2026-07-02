@@ -31,12 +31,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     try {
       final authService = ref.read(firebaseAuthServiceProvider);
-      await authService.login(
+      final credential = await authService.login(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
 
       if (mounted) {
+        debugPrint('Logged in user: ${credential.user?.email ?? 'unknown'}');
         context.go('/home');
       }
     } on FirebaseAuthException catch (e) {
